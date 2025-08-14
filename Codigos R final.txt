@@ -1,0 +1,394 @@
+################################################################################
+# FLACSO - Maestría en población y desarrollo
+# Trabajo SPyD
+# Wisnel FRANCOIS
+# Fecha: 4 de agosto de 2025
+################################################################################
+
+## Paquetes ----
+library(pacman)
+
+p_load(janitor,
+       FactoMineR,
+       tidyverse,
+       factoextra,
+       broom,
+       gridExtra,
+       GGally,
+       ca)
+
+# Abrir bases ----
+
+# ENASEM 2021
+
+setwd("C:/Users/DELL/Desktop/FLACSO 2024-2026/Tercer cuatrimestre/SPyD III/Trabajo/Datos/ENASEM 2021/enasem_2021_bd_csv")
+
+
+base1 <- read_csv("SECT_A_C_D_E_PC_F_H_I_2021.csv")
+base2 <- read_csv("SECT_G_J_K_SA_2021.csv")
+
+
+base1 <- read_csv("C:/Users/DELL/Desktop/FLACSO 2024-2026/Tercer cuatrimestre/SPyD III/Trabajo/Datos/ENASEM 2021/enasem_2021_bd_csv/SECT_A_C_D_E_PC_F_H_I_2021.csv",
+                  col_select = c("CUNICAH",
+                                 "SUBHOG_21",
+                                 "FACTORH_21",
+                                 "C1_21",
+                                 "C49_4_21",
+                                 "I30_21",
+                                 "AGE_21",
+                                 "SEX_21",
+                                 "A3_21",
+                                 "D1_1_21"))
+
+
+base2 <- read_csv("C:/Users/DELL/Desktop/FLACSO 2024-2026/Tercer cuatrimestre/SPyD III/Trabajo/Datos/ENASEM 2021/enasem_2021_bd_csv/SECT_G_J_K_SA_2021.csv",
+                  col_select = c("CUNICAH",
+                                 "SUBHOG_21",
+                                 "FACTORH_21",
+                                 "K88_21",
+                                 "J18_1_21",
+                                 "J18_2_21",
+                                 "J18_3_21",
+                                 "J18_4_21",
+                                 "J18_5_21",
+                                 "J18_6_21",
+                                 "G17_21"))
+
+
+#### Limpiar nombres
+
+base1<- clean_names(base1)
+base2<- clean_names(base2)
+
+# Verificar nombres en minúsculas
+
+names(base1)
+names(base2)
+
+### Pegar bases ----
+# left_join para mantener las observaciones de la TENBIARE
+
+base <- left_join(base1,base2, by = c("cunicah","subhog_21","factorh_21"))
+
+
+
+names(base)
+
+# Preparar los datos ----
+
+#278.80 salario minimo #fuente: https://www.gob.mx/conasami/articulos/incremento-a-los-salarios-minimos-para-2025?idiom=es
+
+
+
+
+library(dplyr)
+
+df <- base %>%
+  
+  # 1. Percepción de salud
+  mutate(
+    # --- 1. Recodificar percepción de salud ---
+    salud_cat = case_when(
+      c1_21 %in% c(1, 2, 3) ~ "Buena a excelente",
+      c1_21 == 4 ~ "Regular",
+      c1_21 == 5 ~ "Mala",
+      TRUE ~ NA_character_
+    ),
+    
+    # 2. Situación económica
+    # --- 2. Recodificar situación económica ---
+    economia_cat = case_when(
+      i30_21 %in% c(1, 2, 3) ~ "Buena a excelente",
+      i30_21 == 4 ~ "Regular",
+      i30_21 == 5 ~ "Mala",
+      TRUE ~ NA_character_
+    ),
+    
+    # 3. Gastos (k88_21 en pesos)
+    gastos_cat = case_when(
+      k88_21 < 278.8 ~ "Menos de 1 SM",
+      k88_21 >= 278.8 & k88_21 <= 557.6 ~ "Entre 1 y 2 SM",
+      k88_21 > 557.7 & k88_21 <= 836.4 ~ "Entre 2 y 3 SM",
+      k88_21 > 836.4 & k88_21 <= 1394 ~ "Entre 3 y 5 SM",
+      k88_21 > 1394 ~ "Más de 5 SM",
+      TRUE ~ NA_character_
+    ),
+    
+    # --- 4. Calcular número de bienes en la vivienda ---
+    bienes_total = rowSums(across(c(j18_1_21, j18_2_21, j18_3_21, j18_4_21, j18_5_21, j18_6_21),
+                                  ~ ifelse(. == 1, 1, ifelse(. %in% c(2, 8, 9), 0, NA))),
+                           na.rm = TRUE),
+    
+    # --- 5. Clasificar condiciones de vivienda ---
+    vivienda_cat = case_when(
+      bienes_total >= 4 ~ "Buenas condiciones",
+      bienes_total < 4 ~ "Malas condiciones",
+      TRUE ~ NA_character_
+    ),
+    
+    # 5. Edad
+    edad_cat = case_when(
+      age_21 >= 50 & age_21 <= 59 ~ "50-59 años",
+      age_21 >= 60 & age_21 <= 69 ~ "60-69 años",
+      age_21 >= 70 ~ "70 o más años",
+      TRUE ~ NA_character_
+    ),
+    
+    # 6. Sexo
+    sexo_cat = case_when(
+      sex_21 == 1 ~ "Hombre",
+      sex_21 == 2 ~ "Mujer",
+      TRUE ~ NA_character_
+    ),
+    
+    # 7. Estado civil
+    estado_civil_cat = case_when(
+      a3_21 %in% c(2, 3) ~ "Casado o unión libre",
+      a3_21 %in% c(4, 5, 1) ~ "Divorciado, separado o soltero",
+      a3_21 == 7 ~ "Viudo",
+      TRUE ~ NA_character_
+    ),
+    
+    # 8. Derecho a servicio médico (IMSS)
+    imss_cat = case_when(
+      d1_1_21 == 1 ~ "Sí",
+      d1_1_21 == 2 ~ "No",
+      TRUE ~ NA_character_
+    ),
+    
+    # 9. Recibir ayuda de hijos/nietos
+    ayuda_cat = case_when(
+      g17_21 == 1 ~ "Sí",
+      g17_21 == 2 ~ "No",
+      TRUE ~ NA_character_
+    )
+  )
+
+
+
+
+
+str(df)
+
+
+
+
+#seleccionar solo las variables necesitas
+df2 <- df %>%
+  select(salud_cat, economia_cat, gastos_cat, vivienda_cat)
+
+str(df)
+
+
+#Convertirlas a factores (y conservar etiquetas)
+df2 <- df2 %>%
+  mutate(across(everything(), ~ as.factor(.)))
+
+# 3. Verificar
+str(df)
+summary(df)
+
+
+
+# Tabla y prueba chi-cuadrado para salud_cat y economia_cat
+tabla1 <- table(df2$salud_cat, df2$economia_cat)
+tabla1 <- addmargins(tabla1)
+print(tabla1)
+chisq.test(tabla1)
+
+# Tabla y prueba chi-cuadrado para salud_cat y gastos_cat
+tabla2 <- table(df2$salud_cat, df2$gastos_cat)
+tabla2 <- addmargins(tabla2)
+print(tabla2)
+chisq.test(tabla2)
+
+# Tabla y prueba chi-cuadrado para salud_cat y vivienda_cat
+tabla3 <- table(df2$salud_cat, df2$vivienda_cat)
+tabla3 <- addmargins(tabla3)
+print(tabla3)
+chisq.test(tabla3)
+
+# Tabla y prueba chi-cuadrado para economia_cat y vivienda_cat
+tabla4 <- table(df2$economia_cat, df2$vivienda_cat)
+tabla4 <- addmargins(tabla4)
+print(tabla4)
+chisq.test(tabla4)
+
+# Realizar ACM FINAL ----
+
+acm<- MCA(df2, graph = FALSE)
+summary(acm)
+
+
+# Calculo manual:
+K <- ncol(df2)  # Para definir número de variables
+eigenvalues_orig <- acm$eig[,1]
+eigenvalues_corr <- ((K/(K-1))^2) * ((eigenvalues_orig - 1/K)^2)
+
+# quito notación científica
+options(scipen = 999)
+
+# Comparar
+data.frame(
+  Dimension = 1:length(eigenvalues_orig),
+  Original = eigenvalues_orig,
+  Corregido = eigenvalues_corr,
+  Var_Explicada_Orig = acm$eig[,2],
+  Var_Explicada_Corr = (eigenvalues_corr/sum(eigenvalues_corr))*100)
+
+## Resultados de la correción ----
+# Identificar dimensiones importantes
+indices_importantes <- which(eigenvalues_corr > 0.001)
+cat("Dimensiones importantes:", indices_importantes, "\n")
+indices_importantes
+
+# Ver valores
+dim_importantes <- data.frame(
+  Dimension = indices_importantes,
+  Eigenvalue_Original = eigenvalues_orig[indices_importantes],
+  Eigenvalue_Corregido = eigenvalues_corr[indices_importantes],
+  Var_Explicada_Corregida = (eigenvalues_corr[indices_importantes]/sum(eigenvalues_corr))*100
+)
+
+print(dim_importantes)
+
+
+
+# Como resultado: es mejor utilizar las dimensiones 1, 2
+
+# Ver variables relacionadas con las dimensiones después de la correción
+acm$var$eta2[, c(1, 2)]
+
+names(acm$var)
+
+
+
+# Cos2 para los planos importantes según Benzécri
+fviz_cos2(acm, choice = "var", axes = c(1, 2)) +
+  labs(title = "Calidad representación: Dim 1 vs 2 (55.9% varianza corregida)")
+
+
+# Mapas ----
+
+## Representación de variables ----
+fviz_mca_var(acm, 
+             choice = "mca.cor",   # Coordenadas de categorías
+             repel = TRUE)
+
+## Elaborar mapa factorial de las categorías ----
+fviz_mca_var(acm, repel = TRUE)
+
+
+
+
+# Sólo considerar la Dim1 para hacer el indice de bien estar
+
+# Extraer coordenadas de Dim1 (46.5% corregida) para individuos
+coordenadas_dim1 <- acm$ind$coord[, 1]
+
+# Índice normalizado
+# Normalizar coordenadas (0 a 100)
+indice <- ((coordenadas_dim1 - min(coordenadas_dim1)) /
+             (max(coordenadas_dim1) - min(coordenadas_dim1))) * 100
+
+# Agregar índice a base
+df$indice <- indice
+
+# Categorías del índice
+df <- df %>%
+  mutate(
+    indice_cat = case_when(
+      indice >= 0 & indice < 33.33 ~ "Bajo",
+      indice >= 33.33 & indice < 66.67 ~ "Medio",
+      indice >= 66.67 & indice <= 100 ~ "Alto"
+    ),
+    indice_cat = factor(indice_cat,
+                        levels = c("Bajo", "Medio", "Alto"))
+  )
+
+# Revisar índice
+summary(df$indice)
+
+
+#Analisis bivariado
+
+#Sexo
+# Tabla de contingencia
+table(df$sexo_cat, df$indice_cat)
+
+# Proporciones por sexo
+prop.table(table(df$sexo_cat, df$indice_cat), 1)
+
+# Prueba de chi-cuadrado
+chisq.test(table(df$sexo_cat, df$indice_cat))
+
+names(df)
+#Sexo
+# Tabla de contingencia
+table(df$estado_civil_cat, df$indice_cat)
+
+# Proporciones por sexo
+prop.table(table(df$estado_civil_cat, df$indice_cat), 1)
+
+# Prueba de chi-cuadrado
+chisq.test(table(df$estado_civil_cat, df$indice_cat))
+
+
+#imss_cat
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(gridExtra)
+library(patchwork)
+
+
+# Filtrar filas sin NA
+df_clean <- df %>%
+  filter(!is.na(imss_cat) & !is.na(indice_cat))
+
+# Tabla de contingencia
+tabla_contingencia <- table(df_clean$imss_cat, df_clean$indice_cat)
+
+# Test chi-cuadrada
+chi_test <- chisq.test(tabla_contingencia)
+
+# Imprimir resultado
+print(chi_test)
+
+# Calcular tabla con porcentajes para gráfica y tabla resumen
+datos_tabla <- df_clean %>%
+  count(imss_cat, indice_cat) %>%
+  group_by(imss_cat) %>%
+  mutate(porcentaje = n / sum(n) * 100) %>%
+  ungroup()
+
+# Preparar tabla resumen en formato ancho
+tabla <- datos_tabla %>%
+  select(imss_cat, indice_cat, porcentaje) %>%
+  pivot_wider(names_from = indice_cat, values_from = porcentaje) %>%
+  rename("Seguro social" = imss_cat) %>%
+  gridExtra::tableGrob(rows = NULL)
+
+# Crear gráfico de barras apiladas con etiquetas
+grafico <- ggplot(datos_tabla, aes(x = imss_cat, y = porcentaje, fill = indice_cat)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = paste0(round(porcentaje,1), "%")), 
+            position = position_stack(vjust = 0.5), size = 4) +
+  labs(title = "Distribución del nivel de bienestar según seguro social",
+       x = "¿Cuenta con seguro social?", y = "Porcentaje", fill = "Nivel de bienestar") +
+  theme_minimal()
+
+# Combinar gráfico y tabla
+grafico + tabla + plot_layout(ncol = 1, heights = c(3, 1))
+
+
+
+#Ayuda
+# Tabla de contingencia
+table(df$ayuda_cat, df$indice_cat)
+
+# Proporciones por sexo
+prop.table(table(df$ayuda_cat, df$indice_cat), 1)
+
+# Prueba de chi-cuadrado
+chisq.test(table(df$ayuda_cat, df$indice_cat))
